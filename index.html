@@ -179,6 +179,11 @@ input:focus, select:focus { border-color: var(--accent2); }
 
 /* DIVIDER */
 hr { border: none; border-top: 1px solid var(--border); }
+
+#sync-status { font-size: 11px; padding: 3px 8px; border-radius: 20px; }
+.sync-ok { background: #e8f5ef; color: #1a7a52; }
+.sync-err { background: #fbeaea; color: #b03030; }
+.sync-busy { background: #fef3e2; color: #b05a00; }
 </style>
 </head>
 <body>
@@ -192,10 +197,7 @@ hr { border: none; border-top: 1px solid var(--border); }
           <div style="font-size:22px;font-weight:700;letter-spacing:-.5px">Fiets Kassa</div>
           <div style="font-size:12px;color:var(--text3)" id="h-datum"></div>
         </div>
-        <span class="badge badge-g">
-          <svg viewBox="0 0 24 24" style="width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2.5"><polyline points="20 6 9 17 4 12"/></svg>
-          Actief
-        </span>
+        <span id="sync-status" class="sync-busy">Verbinden...</span>
       </div>
       <div class="metric-grid">
         <div class="metric"><div class="lbl">Omzet vandaag</div><div class="val" id="h-omzet">€0,00</div><div class="sub">excl. BTW</div></div>
@@ -439,387 +441,65 @@ hr { border: none; border-top: 1px solid var(--border); }
   </div>
 </div>
 
-<script>
-const fmt = n => '€' + n.toFixed(2).replace('.', ',');
-const nl = new Date().toLocaleDateString('nl-BE', {weekday:'long',year:'numeric',month:'long',day:'numeric'});
-document.getElementById('h-datum').textContent = nl;
-document.getElementById('dag-datum').textContent = nl;
-
-// Storage (localStorage for standalone HTML)
-const ST = {
-  get: k => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : null; } catch { return null; } },
-  set: (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} }
-};
-
-const getVK = () => ST.get('vk') || [];
-const getST = () => ST.get('stock') || [];
-const setVK = d => ST.set('vk', d);
-const setST = d => ST.set('stock', d);
-
-let curScreen = 'home';
-let vkType = 'onderdeel';
-let sLoc = 'wagen';
-let sfFilter = 'alle';
-let mvUren = 1.0;
-let uurloon = ST.get('uurloon') || 45;
-let editIdx = null;
-
-// NAV
-function nav(screen, btn) {
-  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-  document.querySelectorAll('.nav button').forEach(b => b.classList.remove('active'));
-  document.getElementById('s-' + screen).classList.add('active');
-  const nb = btn || document.getElementById('nb-' + screen);
-  if (nb) nb.classList.add('active');
-  curScreen = screen;
-  if (screen === 'verkoop') renderVK();
-  if (screen === 'stock') renderST();
-  if (screen === 'overzicht') renderOVZ();
-  if (screen === 'dag') renderDag();
-  if (screen === 'home') updateHome();
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getFirestore, doc, getDoc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+const firebaseConfig={apiKey:"AIzaSyCusZD5lGkacUVgS-7_SoXRhjfil1LPZyM",authDomain:"wielerwijs-kassa.firebaseapp.com",projectId:"wielerwijs-kassa",storageBucket:"wielerwijs-kassa.firebasestorage.app",messagingSenderId:"1003824057406",appId:"1:1003824057406:web:0d2c727e6b059c0977956f"};
+const fbapp=initializeApp(firebaseConfig);
+const db=getFirestore(fbapp);
+async function fbGet(id){try{const s=await getDoc(doc(db,'kassa',id));return s.exists()?s.data().value:null;}catch(e){return null;}}
+async function fbSet(id,v){try{await setDoc(doc(db,'kassa',id),{value:v});setSyncStatus('ok');}catch(e){setSyncStatus('err');}}
+function setSyncStatus(s){const el=document.getElementById('sync-status');if(!el)return;if(s==='ok'){el.className='sync-ok';el.textContent='\u2713 Gesynchroniseerd';}else if(s==='err'){el.className='sync-err';el.textContent='\u2717 Geen verbinding';}else{el.className='sync-busy';el.textContent='\u23f3 Synchroniseren...';}}
+const fmt=n=>'\u20ac'+n.toFixed(2).replace('.',',');
+const nl=new Date().toLocaleDateString('nl-BE',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+document.getElementById('h-datum').textContent=nl;
+document.getElementById('dag-datum').textContent=nl;
+let vkData=[],stData=[],uurloon=45;
+let curScreen='home',vkType='onderdeel',sLoc='wagen',sfFilter='alle',mvUren=1.0,editIdx=null;
+async function init(){
+  setSyncStatus('busy');
+  const vk=await fbGet('vk');if(vk)vkData=vk;
+  const st=await fbGet('stock');if(st)stData=st;
+  const ins=await fbGet('instellingen');if(ins&&ins.uurloon){uurloon=ins.uurloon;document.getElementById('h-uurloon').value=uurloon;document.getElementById('h-uurloon-incl').textContent=fmt(uurloon*1.06);}
+  setSyncStatus('ok');
+  onSnapshot(doc(db,'kassa','vk'),s=>{if(s.exists()){vkData=s.data().value||[];renderVK();updateHome();if(curScreen==='dag')renderDag();}setSyncStatus('ok');},()=>setSyncStatus('err'));
+  onSnapshot(doc(db,'kassa','stock'),s=>{if(s.exists()){stData=s.data().value||[];renderST();renderOVZ();updateHome();}setSyncStatus('ok');},()=>setSyncStatus('err'));
+  onSnapshot(doc(db,'kassa','instellingen'),s=>{if(s.exists()&&s.data().value&&s.data().value.uurloon){uurloon=s.data().value.uurloon;document.getElementById('h-uurloon').value=uurloon;document.getElementById('h-uurloon-incl').textContent=fmt(uurloon*1.06);}},()=>{});
+  updateHome();
 }
-
-// SHEETS
-function openSheet(id) { document.getElementById(id).classList.add('open'); }
-function closeSheet(id) { document.getElementById(id).classList.remove('open'); }
-
-// UURLOON
-function saveUurloon() {
-  uurloon = parseFloat(document.getElementById('h-uurloon').value) || 45;
-  ST.set('uurloon', uurloon);
-  document.getElementById('h-uurloon-incl').textContent = fmt(uurloon * 1.06);
-  if (vkType === 'arbeid') calcArbeid();
-}
-
-// SCAN
-function openScan() {
-  document.getElementById('scan-inp').value = '';
-  document.getElementById('scan-res').style.display = 'none';
-  openSheet('sh-scan');
-  setTimeout(() => document.getElementById('scan-inp').focus(), 150);
-}
-
-function handleScanInput(val) {
-  if (val.length < 3) { document.getElementById('scan-res').style.display = 'none'; return; }
-  const st = getST();
-  const match = st.find(s => s.barcode && s.barcode.toLowerCase() === val.toLowerCase().trim());
-  const res = document.getElementById('scan-res');
-  res.style.display = 'block';
-  if (match) {
-    res.innerHTML = `<div class="alert alert-g"><svg viewBox="0 0 24 24" style="width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round"><polyline points="20 6 9 17 4 12"/></svg>Gevonden: <strong>${match.naam}</strong> — ${fmt(match.vkprijs || 0)} incl. BTW</div>`;
-  } else if (val.length >= 6) {
-    res.innerHTML = `<div class="alert alert-o"><svg viewBox="0 0 24 24" style="width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>Niet gevonden. Voeg eerst toe in Stock met barcode.</div>`;
-  }
-}
-
-function processScan(val) {
-  const code = val.trim();
-  if (!code) { alert('Geef een barcode in.'); return; }
-  const st = getST();
-  const idx = st.findIndex(s => s.barcode && s.barcode.toLowerCase() === code.toLowerCase());
-  if (idx === -1) { alert('Barcode niet gevonden in stock.\nVoeg het artikel eerst toe in Stockbeheer met de barcode.'); return; }
-  const art = st[idx];
-  const prijs = art.vkprijs || 0;
-  const excl = prijs / 1.21;
-  const btwB = prijs - excl;
-  const vk = getVK();
-  vk.push({ omschr: art.naam, bedrag: prijs, type: 'onderdeel', btw: 0.21, exclBtw: excl, btwBedrag: btwB, ts: Date.now(), barcode: code });
-  setVK(vk);
-  if (art.aantal > 0) { st[idx].aantal--; setST(st); }
-  closeSheet('sh-scan');
-  renderVK(); updateHome(); renderST();
-}
-
-// VERKOOP MANUEEL
-function openVerkoop() {
-  vkType = 'onderdeel'; mvUren = 1.0;
-  document.getElementById('mv-omschr').value = '';
-  document.getElementById('mv-bedrag').value = '';
-  document.getElementById('mv-uren').textContent = '1.0';
-  setVKType('onderdeel');
-  openSheet('sh-verkoop');
-}
-
-function adjUren(d) {
-  mvUren = Math.max(0.5, Math.round((mvUren + d) * 2) / 2);
-  document.getElementById('mv-uren').textContent = mvUren.toFixed(1);
-  calcArbeid();
-}
-
-function calcArbeid() {
-  const excl = uurloon * mvUren;
-  document.getElementById('mv-excl').textContent = fmt(excl);
-  document.getElementById('mv-btwarb').textContent = fmt(excl * 0.06);
-  document.getElementById('mv-incl').textContent = fmt(excl * 1.06);
-}
-
-function setVKType(t) {
-  vkType = t;
-  document.getElementById('tt-ond').className = 'tog' + (t === 'onderdeel' ? ' sel-b' : '');
-  document.getElementById('tt-arb').className = 'tog' + (t === 'arbeid' ? ' sel-g' : '');
-  document.getElementById('mv-arb-blok').style.display = t === 'arbeid' ? 'block' : 'none';
-  document.getElementById('mv-bedrag-blok').style.display = t === 'arbeid' ? 'none' : 'block';
-  if (t === 'arbeid') calcArbeid();
-}
-
-function saveVKManueel() {
-  const omschr = document.getElementById('mv-omschr').value.trim();
-  let bedrag, excl, btwB, btwr;
-  if (vkType === 'arbeid') {
-    btwr = 0.06; excl = uurloon * mvUren; btwB = excl * 0.06; bedrag = excl + btwB;
-  } else {
-    bedrag = parseFloat(document.getElementById('mv-bedrag').value);
-    btwr = 0.21; excl = bedrag / 1.21; btwB = bedrag - excl;
-  }
-  if (!omschr || isNaN(bedrag) || bedrag <= 0) { alert('Vul alle velden correct in.'); return; }
-  const vk = getVK();
-  vk.push({ omschr, bedrag, type: vkType, btw: btwr, exclBtw: excl, btwBedrag: btwB, ts: Date.now() });
-  setVK(vk);
-  closeSheet('sh-verkoop');
-  renderVK(); updateHome();
-}
-
-function renderVK() {
-  const data = getVK();
-  const list = document.getElementById('vk-list');
-  const leeg = document.getElementById('vk-leeg');
-  const tot = document.getElementById('vk-totalen');
-  list.innerHTML = '';
-  if (!data.length) { leeg.style.display = 'flex'; tot.style.display = 'none'; return; }
-  leeg.style.display = 'none'; tot.style.display = 'block';
-  let aE = 0, b6 = 0, oE = 0, b21 = 0;
-  const wrap = document.createElement('div'); wrap.className = 'card';
-  data.forEach((v, i) => {
-    const isA = v.type === 'arbeid';
-    if (isA) { aE += v.exclBtw; b6 += v.btwBedrag; } else { oE += v.exclBtw; b21 += v.btwBedrag; }
-    const d = document.createElement('div'); d.className = 'vk-item';
-    d.innerHTML = `<div style="flex:1;min-width:0"><div style="font-size:14px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${v.omschr}</div><div style="font-size:11px;color:var(--text3);margin-top:2px">${fmt(v.exclBtw)} excl. · <span class="badge ${isA ? 'badge-g' : 'badge-b'}">${isA ? '6% arbeid' : '21% onderd.'}</span></div></div><div style="text-align:right;flex-shrink:0"><div style="font-weight:600;font-family:DM Mono,monospace">${fmt(v.bedrag)}</div><button onclick="delVK(${i})" style="background:none;border:none;cursor:pointer;color:var(--red);font-size:11px;margin-top:2px">verwijder</button></div>`;
-    wrap.appendChild(d);
-  });
-  list.appendChild(wrap);
-  document.getElementById('vt-arb').textContent = fmt(aE);
-  document.getElementById('vt-b6').textContent = fmt(b6);
-  document.getElementById('vt-ond').textContent = fmt(oE);
-  document.getElementById('vt-b21').textContent = fmt(b21);
-  document.getElementById('vt-tot').textContent = fmt(aE + b6 + oE + b21);
-}
-
-function delVK(i) {
-  if (!confirm('Verkoop verwijderen?')) return;
-  const d = getVK(); d.splice(i, 1); setVK(d); renderVK(); updateHome();
-}
-
-// STOCK
-function openStockModal(idx = null) {
-  editIdx = idx;
-  document.getElementById('sh-stock-title').childNodes[0].textContent = idx !== null ? 'Artikel bewerken ' : 'Artikel toevoegen ';
-  sLoc = 'wagen'; setLoc('wagen');
-  if (idx !== null) {
-    const s = getST()[idx];
-    document.getElementById('sm-naam').value = s.naam || '';
-    document.getElementById('sm-barcode').value = s.barcode || '';
-    document.getElementById('sm-cat').value = s.cat || 'diverse';
-    document.getElementById('sm-aan').value = s.aantal || 0;
-    document.getElementById('sm-min').value = s.min || 0;
-    document.getElementById('sm-max').value = s.max || 10;
-    document.getElementById('sm-aank').value = s.aankprijs || '';
-    document.getElementById('sm-vk').value = s.vkprijs || '';
-    setLoc(s.locatie || 'wagen');
-  } else {
-    ['sm-naam','sm-barcode','sm-aank','sm-vk'].forEach(id => document.getElementById(id).value = '');
-    document.getElementById('sm-aan').value = 1;
-    document.getElementById('sm-min').value = 2;
-    document.getElementById('sm-max').value = 10;
-  }
-  openSheet('sh-stock');
-}
-
-function setLoc(l) {
-  sLoc = l;
-  document.getElementById('lm-w').className = 'tog' + (l === 'wagen' ? ' sel-b' : '');
-  document.getElementById('lm-t').className = 'tog' + (l === 'thuis' ? ' sel-g' : '');
-}
-
-function saveSM() {
-  const naam = document.getElementById('sm-naam').value.trim();
-  if (!naam) { alert('Naam is verplicht.'); return; }
-  const obj = {
-    naam, barcode: document.getElementById('sm-barcode').value.trim(),
-    cat: document.getElementById('sm-cat').value, locatie: sLoc,
-    aantal: parseInt(document.getElementById('sm-aan').value) || 0,
-    min: parseInt(document.getElementById('sm-min').value) || 0,
-    max: parseInt(document.getElementById('sm-max').value) || 10,
-    aankprijs: parseFloat(document.getElementById('sm-aank').value) || 0,
-    vkprijs: parseFloat(document.getElementById('sm-vk').value) || 0,
-    ts: Date.now()
-  };
-  const st = getST();
-  if (editIdx !== null) st[editIdx] = obj; else st.push(obj);
-  setST(st); editIdx = null;
-  closeSheet('sh-stock'); renderST(); renderOVZ(); updateHome();
-}
-
-function delST(i) {
-  if (!confirm('Artikel verwijderen?')) return;
-  const st = getST(); st.splice(i, 1); setST(st); renderST(); renderOVZ(); updateHome();
-}
-
-function adjST(i, d) {
-  const st = getST(); if (!st[i]) return;
-  st[i].aantal = Math.max(0, st[i].aantal + d);
-  setST(st); renderST(); renderOVZ(); updateHome();
-}
-
-function filterStock(loc, el) {
-  sfFilter = loc;
-  document.querySelectorAll('#sf-row .chip').forEach(c => c.classList.remove('sel'));
-  el.classList.add('sel');
-  renderST();
-}
-
-function barColor(pct) {
-  if (pct <= 0.15) return '#E24B4A';
-  if (pct <= 0.5) return '#EF9F27';
-  return '#3B9A5A';
-}
-
-function stockPct(s) { return Math.min(1, (s.max || 1) > 0 ? s.aantal / (s.max || 1) : 0); }
-
-function renderST() {
-  const st = getST();
-  const list = document.getElementById('st-list');
-  const leeg = document.getElementById('st-leeg');
-  list.innerHTML = '';
-  const filtered = sfFilter === 'alle' ? st : st.filter(s => s.locatie === sfFilter);
-  if (!filtered.length) { leeg.style.display = 'flex'; return; }
-  leeg.style.display = 'none';
-  const wrap = document.createElement('div'); wrap.className = 'card';
-  filtered.forEach(s => {
-    const origI = st.indexOf(s);
-    const pct = stockPct(s);
-    const col = barColor(pct);
-    const laag = s.aantal <= s.min;
-    const d = document.createElement('div'); d.className = 'st-item';
-    d.innerHTML = `<div class="st-icon" style="background:${s.locatie==='wagen'?'#e8eef8':'#e8f5ef'};color:${s.locatie==='wagen'?'var(--blue)':'var(--green)'}"><svg viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/></svg></div>
-    <div style="flex:1;min-width:0">
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
-        <span style="font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${s.naam}</span>
-        <span class="badge ${laag?'badge-r':'badge-g'}" style="flex-shrink:0">${s.aantal}/${s.max}</span>
-      </div>
-      ${s.barcode ? `<div style="font-size:11px;color:var(--text3);margin-top:1px;font-family:DM Mono,monospace">${s.barcode}</div>` : ''}
-      <div class="bar-wrap"><div class="bar-bg"><div class="bar-fill" style="width:${(pct*100).toFixed(1)}%;background:${col}"></div></div></div>
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px">
-        <div style="display:flex;gap:6px;align-items:center">
-          <button class="adj" onclick="adjST(${origI},-1)">−</button>
-          <button class="adj" onclick="adjST(${origI},1)">+</button>
-          <button onclick="openStockModal(${origI})" style="background:none;border:none;cursor:pointer;color:var(--text3);padding:4px;font-size:18px">✏️</button>
-          <button onclick="delST(${origI})" style="background:none;border:none;cursor:pointer;color:var(--red);padding:4px;font-size:18px">🗑</button>
-        </div>
-        <span style="font-size:11px;color:var(--text3)">min ${s.min}</span>
-      </div>
-    </div>`;
-    wrap.appendChild(d);
-  });
-  list.appendChild(wrap);
-}
-
-function renderOVZ() {
-  const st = getST();
-  const list = document.getElementById('ovz-list');
-  const leeg = document.getElementById('ovz-leeg');
-  list.innerHTML = '';
-  if (!st.length) { leeg.style.display = 'flex'; return; }
-  leeg.style.display = 'none';
-  st.forEach((s, i) => {
-    const pct = stockPct(s);
-    const col = barColor(pct);
-    const tekort = Math.max(0, s.max - s.aantal);
-    const status = pct <= 0.15 ? 'Kritiek' : pct <= 0.5 ? 'Laag' : 'OK';
-    const sbadge = pct <= 0.15 ? 'badge-r' : pct <= 0.5 ? 'badge-o' : 'badge-g';
-    const item = document.createElement('div'); item.className = 'ovz-item';
-    item.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">
-      <div><div style="font-size:14px;font-weight:600">${s.naam}</div>
-      <div style="font-size:11px;color:var(--text3);margin-top:2px">${s.locatie === 'wagen' ? '🚐' : '🏠'} ${s.locatie}${s.barcode ? ' · ' + s.barcode : ''}</div></div>
-      <span class="badge ${sbadge}">${status}</span>
-    </div>
-    <div class="bar-bg" style="height:16px;border-radius:8px"><div class="bar-fill" style="width:${(pct*100).toFixed(1)}%;background:${col};height:100%"></div></div>
-    <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:13px">
-      <span style="color:${col};font-weight:600">${s.aantal} aanwezig</span>
-      <span style="color:var(--text3)">max ${s.max}${tekort > 0 ? ` · <span style="color:var(--red);font-weight:600">nog ${tekort} nodig</span>` : ''}</span>
-    </div>`;
-    list.appendChild(item);
-  });
-}
-
-function updateHome() {
-  const ul = ST.get('uurloon');
-  if (ul) { uurloon = ul; document.getElementById('h-uurloon').value = ul; document.getElementById('h-uurloon-incl').textContent = fmt(ul * 1.06); }
-  const vk = getVK();
-  let aE = 0, b6 = 0, oE = 0, b21 = 0;
-  vk.forEach(v => { if (v.type === 'arbeid') { aE += v.exclBtw; b6 += v.btwBedrag; } else { oE += v.exclBtw; b21 += v.btwBedrag; } });
-  document.getElementById('h-omzet').textContent = fmt(aE + oE);
-  document.getElementById('h-vk').textContent = vk.length;
-  document.getElementById('h-b6').textContent = fmt(b6);
-  document.getElementById('h-b21').textContent = fmt(b21);
-  const st = getST();
-  const laag = st.filter(s => s.aantal <= s.min);
-  const card = document.getElementById('h-laag-card');
-  const llist = document.getElementById('h-laag-list');
-  if (laag.length) {
-    card.style.display = 'block';
-    llist.innerHTML = laag.map(s => `<div class="list-row"><span>${s.naam}</span><span class="badge ${s.aantal === 0 ? 'badge-r' : 'badge-o'}">${s.aantal} st.</span></div>`).join('');
-  } else card.style.display = 'none';
-}
-
-function renderDag() {
-  const vk = getVK();
-  let aE = 0, b6 = 0, oE = 0, b21 = 0;
-  vk.forEach(v => { if (v.type === 'arbeid') { aE += v.exclBtw; b6 += v.btwBedrag; } else { oE += v.exclBtw; b21 += v.btwBedrag; } });
-  document.getElementById('d-arb').textContent = fmt(aE);
-  document.getElementById('d-b6').textContent = fmt(b6);
-  document.getElementById('d-ond').textContent = fmt(oE);
-  document.getElementById('d-b21').textContent = fmt(b21);
-  document.getElementById('d-excl').textContent = fmt(aE + oE);
-  document.getElementById('d-btwtot').textContent = fmt(b6 + b21);
-  document.getElementById('d-incl').textContent = fmt(aE + oE + b6 + b21);
-}
-
-async function copyRapport() {
-  const vk = getVK();
-  let aE = 0, b6 = 0, oE = 0, b21 = 0;
-  vk.forEach(v => { if (v.type === 'arbeid') { aE += v.exclBtw; b6 += v.btwBedrag; } else { oE += v.exclBtw; b21 += v.btwBedrag; } });
-  const lines = vk.map(v => `  ${v.omschr.padEnd(30)} ${fmt(v.bedrag)} (${v.type === 'arbeid' ? '6%' : '21%'})`).join('\n');
-  const txt = `DAGRAPPORT ${new Date().toLocaleDateString('nl-BE')}
-${'─'.repeat(44)}
-VERKOPEN:
-${lines || '  (geen)'}
-${'─'.repeat(44)}
-Arbeid excl. BTW:       ${fmt(aE)}
-BTW 6% (arbeid):        ${fmt(b6)}
-Onderdelen excl. BTW:   ${fmt(oE)}
-BTW 21% (onderdelen):   ${fmt(b21)}
-${'─'.repeat(44)}
-Totaal excl. BTW:       ${fmt(aE + oE)}
-Totaal BTW:             ${fmt(b6 + b21)}
-TOTAAL incl. BTW:       ${fmt(aE + oE + b6 + b21)}`;
-  try { await navigator.clipboard.writeText(txt); alert('Rapport gekopieerd!'); }
-  catch { alert('Kopiëren mislukt. Probeer vanuit Safari.'); }
-}
-
-function resetDag() {
-  if (!confirm('Alle verkopen van vandaag wissen?\nDe stock blijft bewaard.')) return;
-  setVK([]);
-  renderVK(); updateHome(); renderDag();
-  alert('Nieuwe dag gestart. Verkopen gewist.');
-}
-
-// Close sheets on bg click
-document.querySelectorAll('.sheet-bg').forEach(bg => {
-  bg.addEventListener('click', e => { if (e.target === bg) bg.classList.remove('open'); });
-});
-
-// Init
-updateHome();
+async function setVK(d){vkData=d;await fbSet('vk',d);}
+async function setST(d){stData=d;await fbSet('stock',d);}
+window.nav=function(screen,btn){document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));document.querySelectorAll('.nav button').forEach(b=>b.classList.remove('active'));document.getElementById('s-'+screen).classList.add('active');(btn||document.getElementById('nb-'+screen)).classList.add('active');curScreen=screen;if(screen==='verkoop')renderVK();if(screen==='stock')renderST();if(screen==='overzicht')renderOVZ();if(screen==='dag')renderDag();if(screen==='home')updateHome();}
+window.openSheet=id=>document.getElementById(id).classList.add('open');
+window.closeSheet=id=>document.getElementById(id).classList.remove('open');
+window.saveUurloon=async function(){uurloon=parseFloat(document.getElementById('h-uurloon').value)||45;document.getElementById('h-uurloon-incl').textContent=fmt(uurloon*1.06);await fbSet('instellingen',{uurloon});}
+window.openScan=function(){document.getElementById('scan-inp').value='';document.getElementById('scan-res').style.display='none';openSheet('sh-scan');setTimeout(()=>document.getElementById('scan-inp').focus(),150);}
+window.handleScanInput=function(val){if(val.length<3){document.getElementById('scan-res').style.display='none';return;}const m=stData.find(s=>s.barcode&&s.barcode.toLowerCase()===val.toLowerCase().trim());const res=document.getElementById('scan-res');res.style.display='block';if(m){res.innerHTML='<div class="alert alert-g">\u2713 Gevonden: <strong>'+m.naam+'</strong> \u2014 '+fmt(m.vkprijs||0)+' incl. BTW</div>';}else if(val.length>=6){res.innerHTML='<div class="alert alert-o">\u26a0 Niet gevonden. Voeg eerst toe in Stock met barcode.</div>';}}
+window.processScan=async function(val){const code=val.trim();if(!code){alert('Geef een barcode in.');return;}const idx=stData.findIndex(s=>s.barcode&&s.barcode.toLowerCase()===code.toLowerCase());if(idx===-1){alert('Barcode niet gevonden.\nVoeg het artikel eerst toe in Stockbeheer met de barcode.');return;}const art=stData[idx];const prijs=art.vkprijs||0;const excl=prijs/1.21;const btwB=prijs-excl;const newVK=[...vkData,{omschr:art.naam,bedrag:prijs,type:'onderdeel',btw:0.21,exclBtw:excl,btwBedrag:btwB,ts:Date.now(),barcode:code}];const newST=[...stData];if(newST[idx].aantal>0)newST[idx]={...newST[idx],aantal:newST[idx].aantal-1};await setVK(newVK);await setST(newST);renderVK();renderST();renderOVZ();updateHome();closeSheet('sh-scan');}
+window.openVerkoop=function(){vkType='onderdeel';mvUren=1.0;document.getElementById('mv-omschr').value='';document.getElementById('mv-bedrag').value='';document.getElementById('mv-uren').textContent='1.0';setVKType('onderdeel');openSheet('sh-verkoop');}
+window.adjUren=function(d){mvUren=Math.max(0.5,Math.round((mvUren+d)*2)/2);document.getElementById('mv-uren').textContent=mvUren.toFixed(1);calcArbeid();}
+function calcArbeid(){const e=uurloon*mvUren;document.getElementById('mv-excl').textContent=fmt(e);document.getElementById('mv-btwarb').textContent=fmt(e*0.06);document.getElementById('mv-incl').textContent=fmt(e*1.06);}
+window.setVKType=function(t){vkType=t;document.getElementById('tt-ond').className='tog'+(t==='onderdeel'?' sel-b':'');document.getElementById('tt-arb').className='tog'+(t==='arbeid'?' sel-g':'');document.getElementById('mv-arb-blok').style.display=t==='arbeid'?'block':'none';document.getElementById('mv-bedrag-blok').style.display=t==='arbeid'?'none':'block';if(t==='arbeid')calcArbeid();}
+window.saveVKManueel=async function(){const omschr=document.getElementById('mv-omschr').value.trim();let bedrag,excl,btwB,btwr;if(vkType==='arbeid'){btwr=0.06;excl=uurloon*mvUren;btwB=excl*0.06;bedrag=excl+btwB;}else{bedrag=parseFloat(document.getElementById('mv-bedrag').value);btwr=0.21;excl=bedrag/1.21;btwB=bedrag-excl;}if(!omschr||isNaN(bedrag)||bedrag<=0){alert('Vul alle velden correct in.');return;}await setVK([...vkData,{omschr,bedrag,type:vkType,btw:btwr,exclBtw:excl,btwBedrag:btwB,ts:Date.now()}]);renderVK();updateHome();closeSheet('sh-verkoop');}
+window.delVK=async function(i){if(!confirm('Verwijderen?'))return;const d=[...vkData];d.splice(i,1);await setVK(d);renderVK();updateHome();}
+window.openStockModal=function(idx=null){editIdx=idx;document.getElementById('sh-stock-title').childNodes[0].textContent=idx!==null?'Artikel bewerken ':'Artikel toevoegen ';setLoc('wagen');if(idx!==null){const s=stData[idx];document.getElementById('sm-naam').value=s.naam||'';document.getElementById('sm-barcode').value=s.barcode||'';document.getElementById('sm-cat').value=s.cat||'diverse';document.getElementById('sm-aan').value=s.aantal||0;document.getElementById('sm-min').value=s.min||0;document.getElementById('sm-max').value=s.max||10;document.getElementById('sm-aank').value=s.aankprijs||'';document.getElementById('sm-vk').value=s.vkprijs||'';setLoc(s.locatie||'wagen');}else{['sm-naam','sm-barcode','sm-aank','sm-vk'].forEach(id=>document.getElementById(id).value='');document.getElementById('sm-aan').value=1;document.getElementById('sm-min').value=2;document.getElementById('sm-max').value=10;}openSheet('sh-stock');}
+window.setLoc=function(l){sLoc=l;document.getElementById('lm-w').className='tog'+(l==='wagen'?' sel-b':'');document.getElementById('lm-t').className='tog'+(l==='thuis'?' sel-g':'');}
+window.saveSM=async function(){const naam=document.getElementById('sm-naam').value.trim();if(!naam){alert('Naam is verplicht.');return;}const obj={naam,barcode:document.getElementById('sm-barcode').value.trim(),cat:document.getElementById('sm-cat').value,locatie:sLoc,aantal:parseInt(document.getElementById('sm-aan').value)||0,min:parseInt(document.getElementById('sm-min').value)||0,max:parseInt(document.getElementById('sm-max').value)||10,aankprijs:parseFloat(document.getElementById('sm-aank').value)||0,vkprijs:parseFloat(document.getElementById('sm-vk').value)||0,ts:Date.now()};const newST=[...stData];if(editIdx!==null)newST[editIdx]=obj;else newST.push(obj);editIdx=null;await setST(newST);renderST();renderOVZ();updateHome();closeSheet('sh-stock');}
+window.delST=async function(i){if(!confirm('Artikel verwijderen?'))return;const d=[...stData];d.splice(i,1);await setST(d);renderST();renderOVZ();updateHome();}
+window.adjST=async function(i,delta){if(!stData[i])return;const n=[...stData];n[i]={...n[i],aantal:Math.max(0,n[i].aantal+delta)};await setST(n);renderST();renderOVZ();updateHome();}
+window.filterStock=function(loc,el){sfFilter=loc;document.querySelectorAll('#sf-row .chip').forEach(c=>c.classList.remove('sel'));el.classList.add('sel');renderST();}
+function barColor(p){return p<=0.15?'#E24B4A':p<=0.5?'#EF9F27':'#3B9A5A';}
+function stockPct(s){return Math.min(1,(s.max||1)>0?s.aantal/(s.max||1):0);}
+function renderVK(){const list=document.getElementById('vk-list'),leeg=document.getElementById('vk-leeg'),tot=document.getElementById('vk-totalen');list.innerHTML='';if(!vkData.length){leeg.style.display='flex';tot.style.display='none';return;}leeg.style.display='none';tot.style.display='block';let aE=0,b6=0,oE=0,b21=0;const wrap=document.createElement('div');wrap.className='card';vkData.forEach((v,i)=>{const isA=v.type==='arbeid';if(isA){aE+=v.exclBtw;b6+=v.btwBedrag;}else{oE+=v.exclBtw;b21+=v.btwBedrag;}const d=document.createElement('div');d.className='vk-item';d.innerHTML='<div style="flex:1;min-width:0"><div style="font-size:14px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+v.omschr+'</div><div style="font-size:11px;color:var(--text3);margin-top:2px">'+fmt(v.exclBtw)+' excl. \u00b7 <span class="badge '+(isA?'badge-g':'badge-b')+'">'+(isA?'6% arbeid':'21% onderd.')+'</span></div></div><div style="text-align:right;flex-shrink:0"><div style="font-weight:600;font-family:DM Mono,monospace">'+fmt(v.bedrag)+'</div><button onclick="delVK('+i+')" style="background:none;border:none;cursor:pointer;color:var(--red);font-size:11px;margin-top:2px">verwijder</button></div>';wrap.appendChild(d);});list.appendChild(wrap);document.getElementById('vt-arb').textContent=fmt(aE);document.getElementById('vt-b6').textContent=fmt(b6);document.getElementById('vt-ond').textContent=fmt(oE);document.getElementById('vt-b21').textContent=fmt(b21);document.getElementById('vt-tot').textContent=fmt(aE+b6+oE+b21);}
+function renderST(){const list=document.getElementById('st-list'),leeg=document.getElementById('st-leeg');list.innerHTML='';const filtered=sfFilter==='alle'?stData:stData.filter(s=>s.locatie===sfFilter);if(!filtered.length){leeg.style.display='flex';return;}leeg.style.display='none';const wrap=document.createElement('div');wrap.className='card';filtered.forEach(s=>{const origI=stData.indexOf(s),pct=stockPct(s),col=barColor(pct),laag=s.aantal<=s.min;const d=document.createElement('div');d.className='st-item';d.innerHTML='<div class="st-icon" style="background:'+(s.locatie==='wagen'?'#e8eef8':'#e8f5ef')+';color:'+(s.locatie==='wagen'?'var(--blue)':'var(--green)')+'">&#x1F4E6;</div><div style="flex:1;min-width:0"><div style="display:flex;justify-content:space-between;align-items:center;gap:6px"><span style="font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+s.naam+'</span><span class="badge '+(laag?'badge-r':'badge-g')+'" style="flex-shrink:0">'+s.aantal+'/'+s.max+'</span></div>'+(s.barcode?'<div style="font-size:11px;color:var(--text3);margin-top:1px;font-family:DM Mono,monospace">'+s.barcode+'</div>':'')+'<div style="margin-top:5px"><div class="bar-bg"><div class="bar-fill" style="width:'+(pct*100).toFixed(1)+'%;background:'+col+'"></div></div></div><div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px"><div style="display:flex;gap:6px;align-items:center"><button class="adj" onclick="adjST('+origI+',-1)">\u2212</button><button class="adj" onclick="adjST('+origI+',1)">+</button><button onclick="openStockModal('+origI+')" style="background:none;border:none;cursor:pointer;color:var(--text3);padding:4px;font-size:18px">&#x270F;&#xFE0F;</button><button onclick="delST('+origI+')" style="background:none;border:none;cursor:pointer;color:var(--red);padding:4px;font-size:18px">&#x1F5D1;</button></div><span style="font-size:11px;color:var(--text3)">min '+s.min+'</span></div></div>';wrap.appendChild(d);});list.appendChild(wrap);}
+function renderOVZ(){const list=document.getElementById('ovz-list'),leeg=document.getElementById('ovz-leeg');list.innerHTML='';if(!stData.length){leeg.style.display='flex';return;}leeg.style.display='none';stData.forEach(s=>{const pct=stockPct(s),col=barColor(pct),tekort=Math.max(0,s.max-s.aantal);const status=pct<=0.15?'Kritiek':pct<=0.5?'Laag':'OK';const sbadge=pct<=0.15?'badge-r':pct<=0.5?'badge-o':'badge-g';const item=document.createElement('div');item.className='ovz-item';item.innerHTML='<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px"><div><div style="font-size:14px;font-weight:600">'+s.naam+'</div><div style="font-size:11px;color:var(--text3);margin-top:2px">'+(s.locatie==='wagen'?'&#x1F690;':'&#x1F3E0;')+' '+s.locatie+(s.barcode?' \u00b7 '+s.barcode:'')+'</div></div><span class="badge '+sbadge+'">'+status+'</span></div><div class="bar-bg" style="height:16px;border-radius:8px"><div class="bar-fill" style="width:'+(pct*100).toFixed(1)+'%;background:'+col+';height:100%"></div></div><div style="display:flex;justify-content:space-between;margin-top:6px;font-size:13px"><span style="color:'+col+';font-weight:600">'+s.aantal+' aanwezig</span><span style="color:var(--text3)">max '+s.max+(tekort>0?' \u00b7 <span style="color:var(--red);font-weight:600">nog '+tekort+' nodig</span>':'')+'</span></div>';list.appendChild(item);});}
+function updateHome(){let aE=0,b6=0,oE=0,b21=0;vkData.forEach(v=>{if(v.type==='arbeid'){aE+=v.exclBtw;b6+=v.btwBedrag;}else{oE+=v.exclBtw;b21+=v.btwBedrag;}});document.getElementById('h-omzet').textContent=fmt(aE+oE);document.getElementById('h-vk').textContent=vkData.length;document.getElementById('h-b6').textContent=fmt(b6);document.getElementById('h-b21').textContent=fmt(b21);const laag=stData.filter(s=>s.aantal<=s.min);const card=document.getElementById('h-laag-card'),llist=document.getElementById('h-laag-list');if(laag.length){card.style.display='block';llist.innerHTML=laag.map(s=>'<div class="list-row"><span>'+s.naam+'</span><span class="badge '+(s.aantal===0?'badge-r':'badge-o')+'">'+s.aantal+' st.</span></div>').join('');}else card.style.display='none';}
+function renderDag(){let aE=0,b6=0,oE=0,b21=0;vkData.forEach(v=>{if(v.type==='arbeid'){aE+=v.exclBtw;b6+=v.btwBedrag;}else{oE+=v.exclBtw;b21+=v.btwBedrag;}});document.getElementById('d-arb').textContent=fmt(aE);document.getElementById('d-b6').textContent=fmt(b6);document.getElementById('d-ond').textContent=fmt(oE);document.getElementById('d-b21').textContent=fmt(b21);document.getElementById('d-excl').textContent=fmt(aE+oE);document.getElementById('d-btwtot').textContent=fmt(b6+b21);document.getElementById('d-incl').textContent=fmt(aE+oE+b6+b21);}
+window.copyRapport=async function(){let aE=0,b6=0,oE=0,b21=0;vkData.forEach(v=>{if(v.type==='arbeid'){aE+=v.exclBtw;b6+=v.btwBedrag;}else{oE+=v.exclBtw;b21+=v.btwBedrag;}});const lines=vkData.map(v=>'  '+v.omschr.padEnd(30)+' '+fmt(v.bedrag)+' ('+(v.type==='arbeid'?'6%':'21%')+')').join('\n');const sep='\u2500'.repeat(44);const txt='DAGRAPPORT '+new Date().toLocaleDateString('nl-BE')+'\n'+sep+'\nVERKOPEN:\n'+(lines||'  (geen)')+'\n'+sep+'\nArbeid excl. BTW:       '+fmt(aE)+'\nBTW 6%:                 '+fmt(b6)+'\nOnderdelen excl. BTW:   '+fmt(oE)+'\nBTW 21%:                '+fmt(b21)+'\n'+sep+'\nTotaal excl. BTW:       '+fmt(aE+oE)+'\nTotaal BTW:             '+fmt(b6+b21)+'\nTOTAAL incl. BTW:       '+fmt(aE+oE+b6+b21);try{await navigator.clipboard.writeText(txt);alert('Rapport gekopieerd!');}catch{alert('Kopiëren mislukt.');}}
+window.resetDag=async function(){if(!confirm('Alle verkopen wissen?\nDe stock blijft bewaard.'))return;await setVK([]);renderVK();renderDag();updateHome();alert('Nieuwe dag gestart.');}
+document.querySelectorAll('.sheet-bg').forEach(bg=>{bg.addEventListener('click',e=>{if(e.target===bg)bg.classList.remove('open');});});
+init();
 </script>
+
 </body>
 </html>
