@@ -1,0 +1,825 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Fiets Kassa">
+<meta name="theme-color" content="#1a1a2e">
+<title>Fiets Kassa</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #f5f4f0;
+  --surface: #ffffff;
+  --surface2: #eeecea;
+  --border: #e0ddd8;
+  --border2: #ccc9c3;
+  --text: #1a1a1a;
+  --text2: #6b6860;
+  --text3: #9e9b96;
+  --green: #1a7a52;
+  --green-bg: #e8f5ef;
+  --green-light: #d0eddf;
+  --blue: #1a4fa0;
+  --blue-bg: #e8eef8;
+  --red: #b03030;
+  --red-bg: #fbeaea;
+  --orange: #b05a00;
+  --orange-bg: #fef3e2;
+  --accent: #2563a8;
+  --accent2: #1a7a52;
+  --nav-h: 62px;
+  --r: 12px;
+  --r-sm: 8px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+html, body { height: 100%; overflow: hidden; background: var(--bg); font-family: 'DM Sans', sans-serif; color: var(--text); font-size: 15px; }
+
+/* LAYOUT */
+#app { display: flex; flex-direction: column; height: 100vh; height: 100dvh; }
+.screens { flex: 1; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; padding-bottom: 20px; }
+.screen { display: none; flex-direction: column; gap: 12px; padding: 14px 14px 0; animation: fadeIn .18s ease; }
+.screen.active { display: flex; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+
+/* NAV */
+.nav {
+  display: grid; grid-template-columns: repeat(5, 1fr);
+  background: var(--surface); border-top: 1px solid var(--border);
+  padding: 0; height: var(--nav-h); flex-shrink: 0;
+  order: 2;
+}
+.nav button {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 3px; border: none; background: none; cursor: pointer;
+  color: var(--text3); font-size: 10px; font-family: 'DM Sans', sans-serif;
+  padding: 8px 2px; transition: color .15s;
+}
+.nav button svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.nav button.active { color: var(--accent2); }
+.nav button.active svg { stroke-width: 2.2; }
+
+/* CARDS & COMMON */
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); padding: 14px; }
+.card-title { font-size: 12px; font-weight: 600; color: var(--text3); letter-spacing: .06em; text-transform: uppercase; margin-bottom: 10px; }
+.metric-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.metric { background: var(--surface2); border-radius: var(--r-sm); padding: 12px; }
+.metric .lbl { font-size: 11px; color: var(--text3); margin-bottom: 3px; }
+.metric .val { font-size: 21px; font-weight: 600; font-family: 'DM Mono', monospace; color: var(--text); }
+.metric .sub { font-size: 10px; color: var(--text3); margin-top: 2px; }
+
+/* BUTTONS */
+.btn { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; padding: 13px; border-radius: var(--r-sm); border: 1px solid var(--border2); background: var(--surface); color: var(--text); font-size: 14px; font-family: 'DM Sans', sans-serif; cursor: pointer; transition: background .12s, transform .1s; }
+.btn:active { transform: scale(0.98); }
+.btn-primary { background: var(--accent2); border-color: var(--accent2); color: #fff; font-weight: 600; }
+.btn-primary:active { background: #155f40; }
+.btn-blue { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+.btn-blue:active { background: #1a3d80; }
+.btn-danger { border-color: #e8aaaa; color: var(--red); }
+.btn-sm { padding: 7px 12px; font-size: 13px; width: auto; border-radius: var(--r-sm); }
+
+/* BADGES */
+.badge { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 20px; white-space: nowrap; }
+.badge-g { background: var(--green-bg); color: var(--green); }
+.badge-b { background: var(--blue-bg); color: var(--blue); }
+.badge-r { background: var(--red-bg); color: var(--red); }
+.badge-o { background: var(--orange-bg); color: var(--orange); }
+.badge-gr { background: var(--surface2); color: var(--text2); }
+
+/* ALERTS */
+.alert { display: flex; align-items: flex-start; gap: 10px; padding: 11px 13px; border-radius: var(--r-sm); font-size: 13px; line-height: 1.5; }
+.alert-g { background: var(--green-bg); color: var(--green); }
+.alert-b { background: var(--blue-bg); color: var(--blue); }
+.alert-o { background: var(--orange-bg); color: var(--orange); }
+.alert-r { background: var(--red-bg); color: var(--red); }
+.alert svg { width: 16px; height: 16px; flex-shrink: 0; margin-top: 1px; }
+
+/* INPUTS */
+.field { display: flex; flex-direction: column; gap: 4px; }
+.field label { font-size: 12px; color: var(--text2); font-weight: 500; }
+input, select, textarea {
+  width: 100%; padding: 10px 12px; border: 1px solid var(--border2);
+  border-radius: var(--r-sm); background: var(--surface); color: var(--text);
+  font-size: 15px; font-family: 'DM Sans', sans-serif;
+  transition: border-color .15s; outline: none;
+  -webkit-appearance: none; appearance: none;
+}
+input:focus, select:focus { border-color: var(--accent2); }
+.input-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.input-grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+
+/* TOGGLE BUTTONS */
+.toggle-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.tog { padding: 10px; border: 1px solid var(--border2); border-radius: var(--r-sm); background: var(--surface); color: var(--text2); font-size: 13px; font-family: 'DM Sans', sans-serif; cursor: pointer; text-align: center; font-weight: 500; transition: all .15s; }
+.tog.sel-g { background: var(--green-bg); border-color: var(--green); color: var(--green); }
+.tog.sel-b { background: var(--blue-bg); border-color: var(--blue); color: var(--blue); }
+
+/* LIST ROWS */
+.list-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border); }
+.list-row:last-child { border-bottom: none; }
+.vk-item { display: flex; justify-content: space-between; align-items: flex-start; padding: 11px 0; border-bottom: 1px solid var(--border); gap: 8px; }
+.vk-item:last-child { border-bottom: none; }
+.totaal-row { display: flex; justify-content: space-between; padding: 5px 0; font-size: 13px; color: var(--text2); }
+.totaal-main { font-weight: 600; font-size: 16px; color: var(--text); padding-top: 10px; border-top: 1px solid var(--border); margin-top: 4px; }
+
+/* STOCK BAR */
+.bar-wrap { margin-top: 5px; }
+.bar-bg { height: 8px; border-radius: 4px; background: var(--surface2); overflow: hidden; }
+.bar-fill { height: 100%; border-radius: 4px; transition: width .4s cubic-bezier(.4,0,.2,1); }
+
+/* ADJ BUTTONS */
+.adj { width: 32px; height: 32px; border: 1px solid var(--border2); border-radius: var(--r-sm); background: var(--surface2); cursor: pointer; font-size: 18px; display: flex; align-items: center; justify-content: center; color: var(--text); transition: background .12s; font-family: 'DM Sans', sans-serif; }
+.adj:active { background: var(--border); transform: scale(0.95); }
+
+/* FAB ROW */
+.fab-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+/* BOTTOM SHEET (modal) */
+.sheet-bg { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 100; align-items: flex-end; }
+.sheet-bg.open { display: flex; }
+.sheet { background: var(--surface); border-radius: 20px 20px 0 0; padding: 20px 16px 36px; width: 100%; display: flex; flex-direction: column; gap: 13px; max-height: 90dvh; overflow-y: auto; }
+.sheet-title { font-size: 17px; font-weight: 600; display: flex; justify-content: space-between; align-items: center; }
+.sheet-title button { background: none; border: none; cursor: pointer; color: var(--text3); padding: 4px; }
+.sheet-title button svg { width: 22px; height: 22px; }
+
+/* SCAN AREA */
+.scan-zone { border: 2px dashed var(--border2); border-radius: var(--r); padding: 24px 16px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 10px; cursor: pointer; transition: border-color .15s; }
+.scan-zone:hover { border-color: var(--accent); }
+.scan-icon { width: 64px; height: 64px; border-radius: 50%; background: var(--blue-bg); display: flex; align-items: center; justify-content: center; }
+.scan-icon svg { width: 32px; height: 32px; stroke: var(--blue); fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+
+/* ARBEID CALC */
+.arb-calc { background: var(--surface2); border-radius: var(--r-sm); padding: 12px; }
+.arb-row { display: flex; justify-content: space-between; font-size: 13px; padding: 3px 0; }
+.arb-row.main { font-weight: 600; font-size: 15px; padding-top: 8px; border-top: 1px solid var(--border); margin-top: 4px; color: var(--text); }
+.arb-row span:first-child { color: var(--text2); }
+.uren-ctrl { display: flex; align-items: center; gap: 12px; }
+.uren-val { font-size: 22px; font-weight: 600; font-family: 'DM Mono', monospace; min-width: 48px; text-align: center; }
+
+/* STOCK ITEM */
+.st-item { display: flex; align-items: flex-start; gap: 10px; padding: 12px 0; border-bottom: 1px solid var(--border); }
+.st-item:last-child { border-bottom: none; }
+.st-icon { width: 36px; height: 36px; border-radius: var(--r-sm); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.st-icon svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+
+/* OVERZICHT ITEM */
+.ovz-item { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); padding: 13px; }
+
+/* CHIP FILTER */
+.chip-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { padding: 6px 12px; border: 1px solid var(--border2); border-radius: 20px; font-size: 12px; cursor: pointer; background: var(--surface); color: var(--text2); transition: all .15s; font-family: 'DM Sans', sans-serif; }
+.chip.sel { background: var(--green-bg); border-color: var(--green); color: var(--green); font-weight: 600; }
+
+/* PAGE HEADER */
+.ph { display: flex; justify-content: space-between; align-items: center; }
+.ph h2 { font-size: 20px; font-weight: 600; }
+
+/* DIVIDER */
+hr { border: none; border-top: 1px solid var(--border); }
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="screens">
+
+    <!-- HOME -->
+    <div class="screen active" id="s-home">
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0">
+        <div>
+          <div style="font-size:22px;font-weight:700;letter-spacing:-.5px">Fiets Kassa</div>
+          <div style="font-size:12px;color:var(--text3)" id="h-datum"></div>
+        </div>
+        <span class="badge badge-g">
+          <svg viewBox="0 0 24 24" style="width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2.5"><polyline points="20 6 9 17 4 12"/></svg>
+          Actief
+        </span>
+      </div>
+      <div class="metric-grid">
+        <div class="metric"><div class="lbl">Omzet vandaag</div><div class="val" id="h-omzet">€0,00</div><div class="sub">excl. BTW</div></div>
+        <div class="metric"><div class="lbl">Verkopen</div><div class="val" id="h-vk">0</div><div class="sub">lijnen</div></div>
+      </div>
+      <div class="metric-grid">
+        <div class="metric"><div class="lbl">BTW 6% arbeid</div><div class="val" id="h-b6">€0,00</div></div>
+        <div class="metric"><div class="lbl">BTW 21% onderd.</div><div class="val" id="h-b21">€0,00</div></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Uurloon instellen</div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <span style="font-size:15px;color:var(--text2);font-weight:500">€</span>
+          <input type="number" id="h-uurloon" value="45" min="1" step="1" style="width:90px" onchange="saveUurloon()">
+          <span style="font-size:13px;color:var(--text2)">/ uur excl. BTW</span>
+        </div>
+        <div style="margin-top:8px;font-size:13px;color:var(--text3)">= <span id="h-uurloon-incl" style="color:var(--green);font-weight:600">€47,70</span> incl. 6% BTW</div>
+      </div>
+      <div class="card" id="h-laag-card" style="display:none">
+        <div class="card-title" style="color:var(--orange)">⚠ Lage stock</div>
+        <div id="h-laag-list"></div>
+      </div>
+      <div class="fab-row">
+        <button class="btn btn-blue" onclick="nav('verkoop');setTimeout(openScan,80)">
+          <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="7" y1="8" x2="7" y2="16"/><line x1="10" y1="8" x2="10" y2="16"/><line x1="14" y1="8" x2="14" y2="16"/><line x1="17" y1="8" x2="17" y2="16"/></svg>
+          Scan artikel
+        </button>
+        <button class="btn btn-primary" onclick="nav('verkoop');setTimeout(openVerkoop,80)">
+          <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Manueel
+        </button>
+      </div>
+    </div>
+
+    <!-- VERKOOP -->
+    <div class="screen" id="s-verkoop">
+      <div class="ph"><h2>Kassaticket</h2></div>
+      <div class="fab-row">
+        <button class="btn btn-blue" onclick="openScan()">
+          <svg viewBox="0 0 24 24" style="width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="7" y1="8" x2="7" y2="16"/><line x1="10" y1="8" x2="10" y2="16"/><line x1="14" y1="8" x2="14" y2="16"/><line x1="17" y1="8" x2="17" y2="16"/></svg>
+          Scan barcode
+        </button>
+        <button class="btn btn-primary" onclick="openVerkoop()">
+          <svg viewBox="0 0 24 24" style="width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Manueel
+        </button>
+      </div>
+      <div id="vk-list"></div>
+      <div class="card" id="vk-totalen" style="display:none">
+        <div class="totaal-row"><span>Arbeid excl. BTW</span><span id="vt-arb">€0,00</span></div>
+        <div class="totaal-row"><span>BTW 6%</span><span id="vt-b6">€0,00</span></div>
+        <div class="totaal-row"><span>Onderdelen excl. BTW</span><span id="vt-ond">€0,00</span></div>
+        <div class="totaal-row"><span>BTW 21%</span><span id="vt-b21">€0,00</span></div>
+        <div class="totaal-row totaal-main"><span>Totaal incl. BTW</span><span id="vt-tot">€0,00</span></div>
+      </div>
+      <div class="alert alert-b" id="vk-leeg">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        Nog geen verkopen. Scan of voeg manueel toe.
+      </div>
+    </div>
+
+    <!-- STOCK -->
+    <div class="screen" id="s-stock">
+      <div class="ph">
+        <h2>Stockbeheer</h2>
+        <button class="btn btn-primary btn-sm" onclick="openStockModal()">+ Nieuw</button>
+      </div>
+      <div class="chip-row" id="sf-row">
+        <div class="chip sel" onclick="filterStock('alle',this)">Alle</div>
+        <div class="chip" onclick="filterStock('wagen',this)">🚐 Wagen</div>
+        <div class="chip" onclick="filterStock('thuis',this)">🏠 Thuis</div>
+      </div>
+      <div id="st-list"></div>
+      <div class="alert alert-b" id="st-leeg" style="display:none">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        Geen artikels. Tik "+ Nieuw" om toe te voegen.
+      </div>
+    </div>
+
+    <!-- OVERZICHT -->
+    <div class="screen" id="s-overzicht">
+      <div class="ph"><h2>Stockoverzicht</h2></div>
+      <div class="alert alert-g" style="font-size:12px;padding:9px 12px">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        <span><b style="color:var(--red)">Rood</b> = leeg · <b style="color:var(--orange)">Oranje</b> = laag · <b style="color:var(--green)">Groen</b> = ok</span>
+      </div>
+      <div id="ovz-list" style="display:flex;flex-direction:column;gap:10px"></div>
+      <div class="alert alert-b" id="ovz-leeg" style="display:none">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        Nog geen stock ingegeven.
+      </div>
+    </div>
+
+    <!-- DAGRAPPORT -->
+    <div class="screen" id="s-dag">
+      <div class="ph"><h2>Dagrapport</h2></div>
+      <div style="font-size:12px;color:var(--text3)" id="dag-datum"></div>
+      <div class="metric-grid">
+        <div class="metric"><div class="lbl">Arbeid excl. BTW</div><div class="val" id="d-arb">€0,00</div></div>
+        <div class="metric"><div class="lbl">BTW 6%</div><div class="val" id="d-b6">€0,00</div></div>
+      </div>
+      <div class="metric-grid">
+        <div class="metric"><div class="lbl">Onderdelen excl. BTW</div><div class="val" id="d-ond">€0,00</div></div>
+        <div class="metric"><div class="lbl">BTW 21%</div><div class="val" id="d-b21">€0,00</div></div>
+      </div>
+      <div class="card">
+        <div class="totaal-row"><span>Totaal excl. BTW</span><span id="d-excl">€0,00</span></div>
+        <div class="totaal-row"><span>Totaal BTW</span><span id="d-btwtot">€0,00</span></div>
+        <div class="totaal-row totaal-main"><span>Totaal incl. BTW</span><span id="d-incl">€0,00</span></div>
+      </div>
+      <div class="alert alert-g">
+        <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+        Klaar voor je boekhoudprogramma
+      </div>
+      <button class="btn" onclick="copyRapport()">
+        <svg viewBox="0 0 24 24" style="width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+        Rapport kopiëren
+      </button>
+      <button class="btn btn-danger" onclick="resetDag()">
+        <svg viewBox="0 0 24 24" style="width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.5"/></svg>
+        Nieuwe dag starten (verkopen wissen)
+      </button>
+    </div>
+
+  </div>
+
+  <!-- BOTTOM NAV -->
+  <nav class="nav">
+    <button class="active" onclick="nav('home',this)" id="nb-home">
+      <svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      Home
+    </button>
+    <button onclick="nav('verkoop',this)" id="nb-verkoop">
+      <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+      Verkoop
+    </button>
+    <button onclick="nav('stock',this)" id="nb-stock">
+      <svg viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+      Stock
+    </button>
+    <button onclick="nav('overzicht',this)" id="nb-overzicht">
+      <svg viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+      Overzicht
+    </button>
+    <button onclick="nav('dag',this)" id="nb-dag">
+      <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+      Dagrapport
+    </button>
+  </nav>
+</div>
+
+<!-- BOTTOM SHEETS -->
+<div class="sheet-bg" id="sh-scan">
+  <div class="sheet">
+    <div class="sheet-title">Barcode scannen <button onclick="closeSheet('sh-scan')"><svg viewBox="0 0 24 24" style="stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>
+    <div class="scan-zone" onclick="document.getElementById('scan-inp').focus()">
+      <div class="scan-icon"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="7" y1="8" x2="7" y2="16"/><line x1="10" y1="8" x2="10" y2="16"/><line x1="14" y1="8" x2="14" y2="16"/><line x1="17" y1="8" x2="17" y2="16"/></svg></div>
+      <div style="font-size:15px;font-weight:600">Richt scanner op barcode</div>
+      <div style="font-size:12px;color:var(--text3)">of tik hier om manueel in te geven</div>
+    </div>
+    <div class="field">
+      <label>Barcode</label>
+      <input type="text" id="scan-inp" placeholder="EAN of intern code" autocomplete="off" inputmode="numeric" oninput="handleScanInput(this.value)" onkeydown="if(event.key==='Enter')processScan(this.value)">
+    </div>
+    <div id="scan-res" style="display:none"></div>
+    <button class="btn btn-primary" onclick="processScan(document.getElementById('scan-inp').value)">
+      <svg viewBox="0 0 24 24" style="width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round"><polyline points="20 6 9 17 4 12"/></svg>
+      Toevoegen aan ticket
+    </button>
+  </div>
+</div>
+
+<div class="sheet-bg" id="sh-verkoop">
+  <div class="sheet">
+    <div class="sheet-title">Manuele verkoop <button onclick="closeSheet('sh-verkoop')"><svg viewBox="0 0 24 24" style="stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>
+    <div class="field">
+      <label>Type</label>
+      <div class="toggle-row">
+        <button class="tog sel-b" id="tt-ond" onclick="setVKType('onderdeel')">🔧 Onderdeel 21%</button>
+        <button class="tog" id="tt-arb" onclick="setVKType('arbeid')">👤 Arbeid 6%</button>
+      </div>
+    </div>
+    <div class="field"><label>Omschrijving</label><input type="text" id="mv-omschr" placeholder="bv. Binnenband 26&quot;"></div>
+    <div id="mv-arb-blok" style="display:none">
+      <div style="margin-bottom:8px">
+        <label style="font-size:12px;color:var(--text2);font-weight:500;display:block;margin-bottom:6px">Aantal uren</label>
+        <div class="uren-ctrl">
+          <button class="adj" onclick="adjUren(-0.5)">−</button>
+          <span class="uren-val" id="mv-uren">1.0</span>
+          <button class="adj" onclick="adjUren(0.5)">+</button>
+          <span style="font-size:13px;color:var(--text2)">uren</span>
+        </div>
+      </div>
+      <div class="arb-calc">
+        <div class="arb-row"><span>Uurloon excl. BTW</span><span id="mv-excl">€45,00</span></div>
+        <div class="arb-row"><span>BTW 6%</span><span id="mv-btwarb">€2,70</span></div>
+        <div class="arb-row main"><span>Totaal incl. BTW</span><span id="mv-incl">€47,70</span></div>
+      </div>
+    </div>
+    <div class="field" id="mv-bedrag-blok"><label>Bedrag incl. BTW (€)</label><input type="number" id="mv-bedrag" placeholder="0,00" step="0.01" min="0" inputmode="decimal"></div>
+    <button class="btn btn-primary" onclick="saveVKManueel()">
+      <svg viewBox="0 0 24 24" style="width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round"><polyline points="20 6 9 17 4 12"/></svg>
+      Registreren
+    </button>
+  </div>
+</div>
+
+<div class="sheet-bg" id="sh-stock">
+  <div class="sheet" id="sh-stock-inner">
+    <div class="sheet-title" id="sh-stock-title">Artikel toevoegen <button onclick="closeSheet('sh-stock')"><svg viewBox="0 0 24 24" style="stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>
+    <div class="field"><label>Naam</label><input type="text" id="sm-naam" placeholder="bv. Binnenband 26&quot;"></div>
+    <div class="field"><label>Barcode (EAN of intern)</label><input type="text" id="sm-barcode" placeholder="bv. 5400000123456" inputmode="numeric"></div>
+    <div class="field"><label>Categorie</label>
+      <select id="sm-cat">
+        <option value="banden">Banden &amp; velgen</option>
+        <option value="aandrijving">Aandrijving &amp; ketting</option>
+        <option value="remmen">Remmen</option>
+        <option value="verlichting">Verlichting</option>
+        <option value="diverse">Diverse</option>
+      </select>
+    </div>
+    <div class="field"><label>Locatie</label>
+      <div class="toggle-row">
+        <button class="tog sel-b" id="lm-w" onclick="setLoc('wagen')">🚐 Wagen</button>
+        <button class="tog" id="lm-t" onclick="setLoc('thuis')">🏠 Thuis</button>
+      </div>
+    </div>
+    <div class="input-grid3">
+      <div class="field"><label>Huidig</label><input type="number" id="sm-aan" value="1" min="0" inputmode="numeric"></div>
+      <div class="field"><label>Minimum</label><input type="number" id="sm-min" value="2" min="0" inputmode="numeric"></div>
+      <div class="field"><label>Maximum</label><input type="number" id="sm-max" value="10" min="1" inputmode="numeric"></div>
+    </div>
+    <div class="input-grid2">
+      <div class="field"><label>Aankoopprijs (€)</label><input type="number" id="sm-aank" step="0.01" min="0" placeholder="0,00" inputmode="decimal"></div>
+      <div class="field"><label>Verkoopprijs incl. BTW (€)</label><input type="number" id="sm-vk" step="0.01" min="0" placeholder="0,00" inputmode="decimal"></div>
+    </div>
+    <button class="btn btn-primary" id="sm-save-btn" onclick="saveSM()">
+      <svg viewBox="0 0 24 24" style="width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round"><polyline points="20 6 9 17 4 12"/></svg>
+      Opslaan
+    </button>
+  </div>
+</div>
+
+<script>
+const fmt = n => '€' + n.toFixed(2).replace('.', ',');
+const nl = new Date().toLocaleDateString('nl-BE', {weekday:'long',year:'numeric',month:'long',day:'numeric'});
+document.getElementById('h-datum').textContent = nl;
+document.getElementById('dag-datum').textContent = nl;
+
+// Storage (localStorage for standalone HTML)
+const ST = {
+  get: k => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : null; } catch { return null; } },
+  set: (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} }
+};
+
+const getVK = () => ST.get('vk') || [];
+const getST = () => ST.get('stock') || [];
+const setVK = d => ST.set('vk', d);
+const setST = d => ST.set('stock', d);
+
+let curScreen = 'home';
+let vkType = 'onderdeel';
+let sLoc = 'wagen';
+let sfFilter = 'alle';
+let mvUren = 1.0;
+let uurloon = ST.get('uurloon') || 45;
+let editIdx = null;
+
+// NAV
+function nav(screen, btn) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.nav button').forEach(b => b.classList.remove('active'));
+  document.getElementById('s-' + screen).classList.add('active');
+  const nb = btn || document.getElementById('nb-' + screen);
+  if (nb) nb.classList.add('active');
+  curScreen = screen;
+  if (screen === 'verkoop') renderVK();
+  if (screen === 'stock') renderST();
+  if (screen === 'overzicht') renderOVZ();
+  if (screen === 'dag') renderDag();
+  if (screen === 'home') updateHome();
+}
+
+// SHEETS
+function openSheet(id) { document.getElementById(id).classList.add('open'); }
+function closeSheet(id) { document.getElementById(id).classList.remove('open'); }
+
+// UURLOON
+function saveUurloon() {
+  uurloon = parseFloat(document.getElementById('h-uurloon').value) || 45;
+  ST.set('uurloon', uurloon);
+  document.getElementById('h-uurloon-incl').textContent = fmt(uurloon * 1.06);
+  if (vkType === 'arbeid') calcArbeid();
+}
+
+// SCAN
+function openScan() {
+  document.getElementById('scan-inp').value = '';
+  document.getElementById('scan-res').style.display = 'none';
+  openSheet('sh-scan');
+  setTimeout(() => document.getElementById('scan-inp').focus(), 150);
+}
+
+function handleScanInput(val) {
+  if (val.length < 3) { document.getElementById('scan-res').style.display = 'none'; return; }
+  const st = getST();
+  const match = st.find(s => s.barcode && s.barcode.toLowerCase() === val.toLowerCase().trim());
+  const res = document.getElementById('scan-res');
+  res.style.display = 'block';
+  if (match) {
+    res.innerHTML = `<div class="alert alert-g"><svg viewBox="0 0 24 24" style="width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round"><polyline points="20 6 9 17 4 12"/></svg>Gevonden: <strong>${match.naam}</strong> — ${fmt(match.vkprijs || 0)} incl. BTW</div>`;
+  } else if (val.length >= 6) {
+    res.innerHTML = `<div class="alert alert-o"><svg viewBox="0 0 24 24" style="width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>Niet gevonden. Voeg eerst toe in Stock met barcode.</div>`;
+  }
+}
+
+function processScan(val) {
+  const code = val.trim();
+  if (!code) { alert('Geef een barcode in.'); return; }
+  const st = getST();
+  const idx = st.findIndex(s => s.barcode && s.barcode.toLowerCase() === code.toLowerCase());
+  if (idx === -1) { alert('Barcode niet gevonden in stock.\nVoeg het artikel eerst toe in Stockbeheer met de barcode.'); return; }
+  const art = st[idx];
+  const prijs = art.vkprijs || 0;
+  const excl = prijs / 1.21;
+  const btwB = prijs - excl;
+  const vk = getVK();
+  vk.push({ omschr: art.naam, bedrag: prijs, type: 'onderdeel', btw: 0.21, exclBtw: excl, btwBedrag: btwB, ts: Date.now(), barcode: code });
+  setVK(vk);
+  if (art.aantal > 0) { st[idx].aantal--; setST(st); }
+  closeSheet('sh-scan');
+  renderVK(); updateHome(); renderST();
+}
+
+// VERKOOP MANUEEL
+function openVerkoop() {
+  vkType = 'onderdeel'; mvUren = 1.0;
+  document.getElementById('mv-omschr').value = '';
+  document.getElementById('mv-bedrag').value = '';
+  document.getElementById('mv-uren').textContent = '1.0';
+  setVKType('onderdeel');
+  openSheet('sh-verkoop');
+}
+
+function adjUren(d) {
+  mvUren = Math.max(0.5, Math.round((mvUren + d) * 2) / 2);
+  document.getElementById('mv-uren').textContent = mvUren.toFixed(1);
+  calcArbeid();
+}
+
+function calcArbeid() {
+  const excl = uurloon * mvUren;
+  document.getElementById('mv-excl').textContent = fmt(excl);
+  document.getElementById('mv-btwarb').textContent = fmt(excl * 0.06);
+  document.getElementById('mv-incl').textContent = fmt(excl * 1.06);
+}
+
+function setVKType(t) {
+  vkType = t;
+  document.getElementById('tt-ond').className = 'tog' + (t === 'onderdeel' ? ' sel-b' : '');
+  document.getElementById('tt-arb').className = 'tog' + (t === 'arbeid' ? ' sel-g' : '');
+  document.getElementById('mv-arb-blok').style.display = t === 'arbeid' ? 'block' : 'none';
+  document.getElementById('mv-bedrag-blok').style.display = t === 'arbeid' ? 'none' : 'block';
+  if (t === 'arbeid') calcArbeid();
+}
+
+function saveVKManueel() {
+  const omschr = document.getElementById('mv-omschr').value.trim();
+  let bedrag, excl, btwB, btwr;
+  if (vkType === 'arbeid') {
+    btwr = 0.06; excl = uurloon * mvUren; btwB = excl * 0.06; bedrag = excl + btwB;
+  } else {
+    bedrag = parseFloat(document.getElementById('mv-bedrag').value);
+    btwr = 0.21; excl = bedrag / 1.21; btwB = bedrag - excl;
+  }
+  if (!omschr || isNaN(bedrag) || bedrag <= 0) { alert('Vul alle velden correct in.'); return; }
+  const vk = getVK();
+  vk.push({ omschr, bedrag, type: vkType, btw: btwr, exclBtw: excl, btwBedrag: btwB, ts: Date.now() });
+  setVK(vk);
+  closeSheet('sh-verkoop');
+  renderVK(); updateHome();
+}
+
+function renderVK() {
+  const data = getVK();
+  const list = document.getElementById('vk-list');
+  const leeg = document.getElementById('vk-leeg');
+  const tot = document.getElementById('vk-totalen');
+  list.innerHTML = '';
+  if (!data.length) { leeg.style.display = 'flex'; tot.style.display = 'none'; return; }
+  leeg.style.display = 'none'; tot.style.display = 'block';
+  let aE = 0, b6 = 0, oE = 0, b21 = 0;
+  const wrap = document.createElement('div'); wrap.className = 'card';
+  data.forEach((v, i) => {
+    const isA = v.type === 'arbeid';
+    if (isA) { aE += v.exclBtw; b6 += v.btwBedrag; } else { oE += v.exclBtw; b21 += v.btwBedrag; }
+    const d = document.createElement('div'); d.className = 'vk-item';
+    d.innerHTML = `<div style="flex:1;min-width:0"><div style="font-size:14px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${v.omschr}</div><div style="font-size:11px;color:var(--text3);margin-top:2px">${fmt(v.exclBtw)} excl. · <span class="badge ${isA ? 'badge-g' : 'badge-b'}">${isA ? '6% arbeid' : '21% onderd.'}</span></div></div><div style="text-align:right;flex-shrink:0"><div style="font-weight:600;font-family:DM Mono,monospace">${fmt(v.bedrag)}</div><button onclick="delVK(${i})" style="background:none;border:none;cursor:pointer;color:var(--red);font-size:11px;margin-top:2px">verwijder</button></div>`;
+    wrap.appendChild(d);
+  });
+  list.appendChild(wrap);
+  document.getElementById('vt-arb').textContent = fmt(aE);
+  document.getElementById('vt-b6').textContent = fmt(b6);
+  document.getElementById('vt-ond').textContent = fmt(oE);
+  document.getElementById('vt-b21').textContent = fmt(b21);
+  document.getElementById('vt-tot').textContent = fmt(aE + b6 + oE + b21);
+}
+
+function delVK(i) {
+  if (!confirm('Verkoop verwijderen?')) return;
+  const d = getVK(); d.splice(i, 1); setVK(d); renderVK(); updateHome();
+}
+
+// STOCK
+function openStockModal(idx = null) {
+  editIdx = idx;
+  document.getElementById('sh-stock-title').childNodes[0].textContent = idx !== null ? 'Artikel bewerken ' : 'Artikel toevoegen ';
+  sLoc = 'wagen'; setLoc('wagen');
+  if (idx !== null) {
+    const s = getST()[idx];
+    document.getElementById('sm-naam').value = s.naam || '';
+    document.getElementById('sm-barcode').value = s.barcode || '';
+    document.getElementById('sm-cat').value = s.cat || 'diverse';
+    document.getElementById('sm-aan').value = s.aantal || 0;
+    document.getElementById('sm-min').value = s.min || 0;
+    document.getElementById('sm-max').value = s.max || 10;
+    document.getElementById('sm-aank').value = s.aankprijs || '';
+    document.getElementById('sm-vk').value = s.vkprijs || '';
+    setLoc(s.locatie || 'wagen');
+  } else {
+    ['sm-naam','sm-barcode','sm-aank','sm-vk'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('sm-aan').value = 1;
+    document.getElementById('sm-min').value = 2;
+    document.getElementById('sm-max').value = 10;
+  }
+  openSheet('sh-stock');
+}
+
+function setLoc(l) {
+  sLoc = l;
+  document.getElementById('lm-w').className = 'tog' + (l === 'wagen' ? ' sel-b' : '');
+  document.getElementById('lm-t').className = 'tog' + (l === 'thuis' ? ' sel-g' : '');
+}
+
+function saveSM() {
+  const naam = document.getElementById('sm-naam').value.trim();
+  if (!naam) { alert('Naam is verplicht.'); return; }
+  const obj = {
+    naam, barcode: document.getElementById('sm-barcode').value.trim(),
+    cat: document.getElementById('sm-cat').value, locatie: sLoc,
+    aantal: parseInt(document.getElementById('sm-aan').value) || 0,
+    min: parseInt(document.getElementById('sm-min').value) || 0,
+    max: parseInt(document.getElementById('sm-max').value) || 10,
+    aankprijs: parseFloat(document.getElementById('sm-aank').value) || 0,
+    vkprijs: parseFloat(document.getElementById('sm-vk').value) || 0,
+    ts: Date.now()
+  };
+  const st = getST();
+  if (editIdx !== null) st[editIdx] = obj; else st.push(obj);
+  setST(st); editIdx = null;
+  closeSheet('sh-stock'); renderST(); renderOVZ(); updateHome();
+}
+
+function delST(i) {
+  if (!confirm('Artikel verwijderen?')) return;
+  const st = getST(); st.splice(i, 1); setST(st); renderST(); renderOVZ(); updateHome();
+}
+
+function adjST(i, d) {
+  const st = getST(); if (!st[i]) return;
+  st[i].aantal = Math.max(0, st[i].aantal + d);
+  setST(st); renderST(); renderOVZ(); updateHome();
+}
+
+function filterStock(loc, el) {
+  sfFilter = loc;
+  document.querySelectorAll('#sf-row .chip').forEach(c => c.classList.remove('sel'));
+  el.classList.add('sel');
+  renderST();
+}
+
+function barColor(pct) {
+  if (pct <= 0.15) return '#E24B4A';
+  if (pct <= 0.5) return '#EF9F27';
+  return '#3B9A5A';
+}
+
+function stockPct(s) { return Math.min(1, (s.max || 1) > 0 ? s.aantal / (s.max || 1) : 0); }
+
+function renderST() {
+  const st = getST();
+  const list = document.getElementById('st-list');
+  const leeg = document.getElementById('st-leeg');
+  list.innerHTML = '';
+  const filtered = sfFilter === 'alle' ? st : st.filter(s => s.locatie === sfFilter);
+  if (!filtered.length) { leeg.style.display = 'flex'; return; }
+  leeg.style.display = 'none';
+  const wrap = document.createElement('div'); wrap.className = 'card';
+  filtered.forEach(s => {
+    const origI = st.indexOf(s);
+    const pct = stockPct(s);
+    const col = barColor(pct);
+    const laag = s.aantal <= s.min;
+    const d = document.createElement('div'); d.className = 'st-item';
+    d.innerHTML = `<div class="st-icon" style="background:${s.locatie==='wagen'?'#e8eef8':'#e8f5ef'};color:${s.locatie==='wagen'?'var(--blue)':'var(--green)'}"><svg viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/></svg></div>
+    <div style="flex:1;min-width:0">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
+        <span style="font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${s.naam}</span>
+        <span class="badge ${laag?'badge-r':'badge-g'}" style="flex-shrink:0">${s.aantal}/${s.max}</span>
+      </div>
+      ${s.barcode ? `<div style="font-size:11px;color:var(--text3);margin-top:1px;font-family:DM Mono,monospace">${s.barcode}</div>` : ''}
+      <div class="bar-wrap"><div class="bar-bg"><div class="bar-fill" style="width:${(pct*100).toFixed(1)}%;background:${col}"></div></div></div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px">
+        <div style="display:flex;gap:6px;align-items:center">
+          <button class="adj" onclick="adjST(${origI},-1)">−</button>
+          <button class="adj" onclick="adjST(${origI},1)">+</button>
+          <button onclick="openStockModal(${origI})" style="background:none;border:none;cursor:pointer;color:var(--text3);padding:4px;font-size:18px">✏️</button>
+          <button onclick="delST(${origI})" style="background:none;border:none;cursor:pointer;color:var(--red);padding:4px;font-size:18px">🗑</button>
+        </div>
+        <span style="font-size:11px;color:var(--text3)">min ${s.min}</span>
+      </div>
+    </div>`;
+    wrap.appendChild(d);
+  });
+  list.appendChild(wrap);
+}
+
+function renderOVZ() {
+  const st = getST();
+  const list = document.getElementById('ovz-list');
+  const leeg = document.getElementById('ovz-leeg');
+  list.innerHTML = '';
+  if (!st.length) { leeg.style.display = 'flex'; return; }
+  leeg.style.display = 'none';
+  st.forEach((s, i) => {
+    const pct = stockPct(s);
+    const col = barColor(pct);
+    const tekort = Math.max(0, s.max - s.aantal);
+    const status = pct <= 0.15 ? 'Kritiek' : pct <= 0.5 ? 'Laag' : 'OK';
+    const sbadge = pct <= 0.15 ? 'badge-r' : pct <= 0.5 ? 'badge-o' : 'badge-g';
+    const item = document.createElement('div'); item.className = 'ovz-item';
+    item.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">
+      <div><div style="font-size:14px;font-weight:600">${s.naam}</div>
+      <div style="font-size:11px;color:var(--text3);margin-top:2px">${s.locatie === 'wagen' ? '🚐' : '🏠'} ${s.locatie}${s.barcode ? ' · ' + s.barcode : ''}</div></div>
+      <span class="badge ${sbadge}">${status}</span>
+    </div>
+    <div class="bar-bg" style="height:16px;border-radius:8px"><div class="bar-fill" style="width:${(pct*100).toFixed(1)}%;background:${col};height:100%"></div></div>
+    <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:13px">
+      <span style="color:${col};font-weight:600">${s.aantal} aanwezig</span>
+      <span style="color:var(--text3)">max ${s.max}${tekort > 0 ? ` · <span style="color:var(--red);font-weight:600">nog ${tekort} nodig</span>` : ''}</span>
+    </div>`;
+    list.appendChild(item);
+  });
+}
+
+function updateHome() {
+  const ul = ST.get('uurloon');
+  if (ul) { uurloon = ul; document.getElementById('h-uurloon').value = ul; document.getElementById('h-uurloon-incl').textContent = fmt(ul * 1.06); }
+  const vk = getVK();
+  let aE = 0, b6 = 0, oE = 0, b21 = 0;
+  vk.forEach(v => { if (v.type === 'arbeid') { aE += v.exclBtw; b6 += v.btwBedrag; } else { oE += v.exclBtw; b21 += v.btwBedrag; } });
+  document.getElementById('h-omzet').textContent = fmt(aE + oE);
+  document.getElementById('h-vk').textContent = vk.length;
+  document.getElementById('h-b6').textContent = fmt(b6);
+  document.getElementById('h-b21').textContent = fmt(b21);
+  const st = getST();
+  const laag = st.filter(s => s.aantal <= s.min);
+  const card = document.getElementById('h-laag-card');
+  const llist = document.getElementById('h-laag-list');
+  if (laag.length) {
+    card.style.display = 'block';
+    llist.innerHTML = laag.map(s => `<div class="list-row"><span>${s.naam}</span><span class="badge ${s.aantal === 0 ? 'badge-r' : 'badge-o'}">${s.aantal} st.</span></div>`).join('');
+  } else card.style.display = 'none';
+}
+
+function renderDag() {
+  const vk = getVK();
+  let aE = 0, b6 = 0, oE = 0, b21 = 0;
+  vk.forEach(v => { if (v.type === 'arbeid') { aE += v.exclBtw; b6 += v.btwBedrag; } else { oE += v.exclBtw; b21 += v.btwBedrag; } });
+  document.getElementById('d-arb').textContent = fmt(aE);
+  document.getElementById('d-b6').textContent = fmt(b6);
+  document.getElementById('d-ond').textContent = fmt(oE);
+  document.getElementById('d-b21').textContent = fmt(b21);
+  document.getElementById('d-excl').textContent = fmt(aE + oE);
+  document.getElementById('d-btwtot').textContent = fmt(b6 + b21);
+  document.getElementById('d-incl').textContent = fmt(aE + oE + b6 + b21);
+}
+
+async function copyRapport() {
+  const vk = getVK();
+  let aE = 0, b6 = 0, oE = 0, b21 = 0;
+  vk.forEach(v => { if (v.type === 'arbeid') { aE += v.exclBtw; b6 += v.btwBedrag; } else { oE += v.exclBtw; b21 += v.btwBedrag; } });
+  const lines = vk.map(v => `  ${v.omschr.padEnd(30)} ${fmt(v.bedrag)} (${v.type === 'arbeid' ? '6%' : '21%'})`).join('\n');
+  const txt = `DAGRAPPORT ${new Date().toLocaleDateString('nl-BE')}
+${'─'.repeat(44)}
+VERKOPEN:
+${lines || '  (geen)'}
+${'─'.repeat(44)}
+Arbeid excl. BTW:       ${fmt(aE)}
+BTW 6% (arbeid):        ${fmt(b6)}
+Onderdelen excl. BTW:   ${fmt(oE)}
+BTW 21% (onderdelen):   ${fmt(b21)}
+${'─'.repeat(44)}
+Totaal excl. BTW:       ${fmt(aE + oE)}
+Totaal BTW:             ${fmt(b6 + b21)}
+TOTAAL incl. BTW:       ${fmt(aE + oE + b6 + b21)}`;
+  try { await navigator.clipboard.writeText(txt); alert('Rapport gekopieerd!'); }
+  catch { alert('Kopiëren mislukt. Probeer vanuit Safari.'); }
+}
+
+function resetDag() {
+  if (!confirm('Alle verkopen van vandaag wissen?\nDe stock blijft bewaard.')) return;
+  setVK([]);
+  renderVK(); updateHome(); renderDag();
+  alert('Nieuwe dag gestart. Verkopen gewist.');
+}
+
+// Close sheets on bg click
+document.querySelectorAll('.sheet-bg').forEach(bg => {
+  bg.addEventListener('click', e => { if (e.target === bg) bg.classList.remove('open'); });
+});
+
+// Init
+updateHome();
+</script>
+</body>
+</html>
